@@ -9,10 +9,10 @@ export default function StartupIntakeForm({ onComplete }) {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
 
-  // Updated state matching your new field requirements
+  // Updated state: Swapped lookingFor out for a Business Description
   const [formData, setFormData] = useState({
     startupName: '',
-    lookingFor: '',
+    description: '', 
     sector: 'FinTech',
     stage: 'Ideation / MVP Concept',
     teamSize: '1-5',
@@ -31,23 +31,24 @@ export default function StartupIntakeForm({ onComplete }) {
     try {
       if (!auth.currentUser) throw new Error("Authentication missing. Please reload.");
 
-      // 1. Sanitize string into a clean array to prevent dashboard split() crashes
-      const cleanedLookingFor = formData.lookingFor
-        .split(',')
-        .map(item => item.trim())
-        .filter(item => item !== "");
-
+      // Formatted payload for the AI matching engine
       const telemetryPacket = {
-        ...formData,
-        lookingFor: cleanedLookingFor,
+        startupName: formData.startupName,
+        description: formData.description,
+        sector: formData.sector,
+        stage: formData.stage,
+        teamSize: formData.teamSize,
+        fundingNeededMin: formData.fundingMin, 
+        fundingNeededMax: formData.fundingMax,
+        lookingFor: ["Matches Generated"], // Failsafe array so your Profile UI doesn't crash
         setupComplete: true,
         createdAt: new Date().toISOString()
       };
 
-      // 2. Save core profile to Firebase immediately
+      // Save core profile to Firebase immediately
       await setDoc(doc(db, "smes", auth.currentUser.uid), telemetryPacket, { merge: true });
 
-      // 3. Trigger the AI Analysis Pipeline
+      // Trigger the AI Analysis Pipeline
       const response = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -61,21 +62,23 @@ export default function StartupIntakeForm({ onComplete }) {
 
       const matchData = await response.json();
 
-      // 4. Save AI generated matches back to the profile
+      // Save AI generated matches back to the profile
       await setDoc(doc(db, "smes", auth.currentUser.uid), { 
         recommendations: matchData.recommendations,
         metrics: { matches: matchData.recommendations?.length || 0 }
       }, { merge: true });
 
-      // Success! Move to Step 3 briefly before triggering the dashboard load
+      // Success! Move to Step 3 briefly...
       setStep(3);
+      
+      // THE FIX: Force a hard refresh after 1.5 seconds to guarantee dashboard load
       setTimeout(() => {
         if (onComplete) onComplete();
+        window.location.reload(); 
       }, 1500);
 
     } catch (error) {
       console.error("Pipeline Error:", error);
-      // Clean UI error instead of an ugly window.alert
       setErrorMsg(error.message.includes("JSON") 
         ? "The AI model timed out while generating matches. Please hit retry." 
         : error.message);
@@ -84,11 +87,9 @@ export default function StartupIntakeForm({ onComplete }) {
     }
   };
 
-  // --- STYLING VARS ---
   const inputStyle = "w-full bg-slate-950/50 border border-slate-800 rounded-xl p-4 text-sm text-white focus:border-amber-500 outline-none transition-all";
   const labelStyle = "text-[11px] font-black text-slate-500 uppercase tracking-widest block mb-2";
 
-  // --- LOADING STATE (Replicating your black screen) ---
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[500px] animate-in fade-in duration-500">
@@ -129,12 +130,12 @@ export default function StartupIntakeForm({ onComplete }) {
         </div>
       )}
 
-      {/* STEP 1 */}
+      {/* STEP 1: Updated with Description Field */}
       {step === 1 && (
         <div className="space-y-8 animate-in slide-in-from-right-4 duration-300">
           <div>
             <h2 className="text-3xl font-black text-white tracking-tight mb-2">Entity Initialization</h2>
-            <p className="text-slate-400 text-sm">Define your core enterprise identity and objectives.</p>
+            <p className="text-slate-400 text-sm">Define your core enterprise identity and business model.</p>
           </div>
           
           <div className="grid grid-cols-1 gap-6">
@@ -143,13 +144,19 @@ export default function StartupIntakeForm({ onComplete }) {
               <input type="text" name="startupName" value={formData.startupName} onChange={handleChange} placeholder="e.g. MyKabel Technologies Sdn Bhd" className={inputStyle} />
             </div>
             <div>
-              <label className={labelStyle}>Matching Objectives (Comma Separated)</label>
-              <input type="text" name="lookingFor" value={formData.lookingFor} onChange={handleChange} placeholder="e.g. Pre-Seed Investors, Technical Co-founder, Government Grants" className={inputStyle} />
+              <label className={labelStyle}>Business Description</label>
+              <textarea 
+                name="description" 
+                value={formData.description} 
+                onChange={handleChange} 
+                placeholder="Describe your product, target audience, and current traction..." 
+                className={`${inputStyle} resize-none h-32`} 
+              />
             </div>
           </div>
 
           <div className="flex justify-end pt-6">
-            <button onClick={() => setStep(2)} disabled={!formData.startupName} className="bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-black px-8 py-3 rounded-xl tracking-wider uppercase transition-all">
+            <button onClick={() => setStep(2)} disabled={!formData.startupName || !formData.description} className="bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-black px-8 py-3 rounded-xl tracking-wider uppercase transition-all">
               Next Step &rarr;
             </button>
           </div>
@@ -177,15 +184,12 @@ export default function StartupIntakeForm({ onComplete }) {
                 {['Ideation / MVP Concept', 'Pre-Seed', 'Seed', 'Series A'].map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
-            
-            {/* NEW FIELDS REQUESTED */}
             <div>
               <label className={labelStyle}>Active Team Size</label>
               <select name="teamSize" value={formData.teamSize} onChange={handleChange} className={`${inputStyle} appearance-none`}>
                 {['1-5', '6-10', '11-20', '21-50', '50+'].map(s => <option key={s} value={s}>{s} members</option>)}
               </select>
             </div>
-            
             <div className="bg-slate-950/30 p-4 rounded-xl border border-slate-800">
               <label className={labelStyle}>Target Funding Amount (RMK)</label>
               <div className="flex items-center gap-3">
@@ -197,28 +201,4 @@ export default function StartupIntakeForm({ onComplete }) {
           </div>
 
           <div className="flex justify-between pt-6 border-t border-slate-800/50">
-            <button onClick={() => setStep(1)} className="text-slate-400 hover:text-white font-bold px-4 py-3 tracking-wider uppercase transition-colors">
-              &larr; Back
-            </button>
-            <button onClick={processAndSync} className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-8 py-3 rounded-xl tracking-wider uppercase transition-all shadow-[0_0_15px_rgba(245,158,11,0.4)]">
-              Calculate Matches &rarr;
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* STEP 3 */}
-      {step === 3 && (
-        <div className="text-center py-12 animate-in zoom-in duration-500">
-          <div className="w-20 h-20 bg-emerald-500/20 border border-emerald-500/50 rounded-full flex items-center justify-center mx-auto mb-6">
-            <svg className="w-10 h-10 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-            </svg>
-          </div>
-          <h2 className="text-3xl font-black text-white tracking-tight mb-2">Matrix Synchronized</h2>
-          <p className="text-slate-400 text-sm">Initializing your personalized dashboard...</p>
-        </div>
-      )}
-    </div>
-  );
-}
+            <button onClick={() => setStep(1)} className="text-slate-
