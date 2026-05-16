@@ -1,58 +1,77 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { db, auth } from '../app/lib/firebaseConfig';
+import { onAuthStateChanged } from 'firebase/auth';
 
 export default function RoadmapTracker() {
-  // Pre-loaded state with your requested modifications
-  const [tasks, setTasks] = useState([
-    { 
-      id: 1, 
-      category: 'LEGAL', 
-      title: 'Register as Sdn Bhd (SSM)', 
-      completed: true, 
-      link: 'https://ezbiz.ssm.com.my/' 
-    },
-    { 
-      id: 2, 
-      category: 'FINANCIAL', 
-      title: 'Open Corporate Bank Account', 
-      completed: true,
-      link: 'https://www.maybank2u.com.my/home/m2u/common/login.do' // <-- Added Link
-    },
-    { 
-      id: 3, 
-      category: 'LEGAL', 
-      title: 'Draft Initial Cap Table', 
-      completed: true,
-      link: 'https://www.cakeequity.com/' 
-    },
-    { 
-      id: 4, 
-      category: 'FINANCIAL', 
-      title: 'Prepare 12-Month Financial Projections', 
-      completed: true,
-      link: 'https://www.liveplan.com/' // <-- Added Link
-    },
-    { 
-      id: 5, 
-      category: 'TAX', 
-      title: 'Register Corporate Tax Profile (MyTax)', 
-      completed: true, 
-      link: 'https://mytax.hasil.gov.my/' 
-    }
-  ]);
+  // 1. Set all defaults to FALSE so new users start at 0%
+  const defaultTasks = [
+    { id: 1, category: 'LEGAL', title: 'Register as Sdn Bhd (SSM)', completed: false, link: 'https://ezbiz.ssm.com.my/' },
+    { id: 2, category: 'FINANCIAL', title: 'Open Corporate Bank Account', completed: false, link: 'https://www.maybank2u.com.my/home/m2u/common/login.do' },
+    { id: 3, category: 'LEGAL', title: 'Draft Initial Cap Table', completed: false, link: 'https://carta.com/founders/launch/' },
+    { id: 4, category: 'FINANCIAL', title: 'Prepare 12-Month Financial Projections', completed: false, link: 'https://www.liveplan.com/' },
+    { id: 5, category: 'TAX', title: 'Register Corporate Tax Profile (MyTax)', completed: false, link: 'https://mytax.hasil.gov.my/' }
+  ];
 
+  const [tasks, setTasks] = useState(defaultTasks);
   const [progress, setProgress] = useState(0);
 
+  // 2. Fetch the specific user's saved progress from Firebase
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        try {
+          const docRef = doc(db, "smes", user.uid);
+          const docSnap = await getDoc(docRef);
+          
+          if (docSnap.exists() && docSnap.data().roadmap) {
+            const savedRoadmap = docSnap.data().roadmap;
+            // Merge the saved true/false states into the task array
+            setTasks(defaultTasks.map(task => ({
+              ...task,
+              completed: savedRoadmap[task.id] || false
+            })));
+          }
+        } catch (error) {
+          console.error("Error loading roadmap state:", error);
+        }
+      } else {
+        setTasks(defaultTasks); // Reset if they log out
+      }
+    });
+
+    return () => unsubscribe();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Update progress bar math
   useEffect(() => {
     const completedTasks = tasks.filter(task => task.completed).length;
     setProgress(Math.round((completedTasks / tasks.length) * 100));
   }, [tasks]);
 
-  const toggleTask = (id) => {
-    setTasks(tasks.map(task => 
+  // 3. Toggle task and INSTANTLY save to Firebase
+  const toggleTask = async (id) => {
+    const updatedTasks = tasks.map(task => 
       task.id === id ? { ...task, completed: !task.completed } : task
-    ));
+    );
+    setTasks(updatedTasks);
+
+    if (auth.currentUser) {
+      try {
+        // Convert the array into a simple object (e.g. { 1: true, 2: false }) to save efficiently
+        const roadmapState = {};
+        updatedTasks.forEach(t => { roadmapState[t.id] = t.completed; });
+        
+        await setDoc(doc(db, "smes", auth.currentUser.uid), {
+          roadmap: roadmapState
+        }, { merge: true });
+      } catch (error) {
+        console.error("Error saving roadmap to cloud:", error);
+      }
+    }
   };
 
   return (
@@ -124,13 +143,13 @@ export default function RoadmapTracker() {
               </div>
             </div>
 
-            {/* Right Side: External Portal Links (If applicable) */}
+            {/* Right Side: External Portal Links */}
             {task.link && (
               <a 
                 href={task.link} 
                 target="_blank" 
                 rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()} // Prevents clicking the link from toggling the checkbox
+                onClick={(e) => e.stopPropagation()} 
                 className={`ml-4 px-4 py-2 rounded-xl text-xs font-bold tracking-wide transition-all flex items-center gap-2
                   ${task.completed 
                     ? 'bg-slate-950/50 text-slate-500 border border-slate-800 hover:text-slate-300' 
