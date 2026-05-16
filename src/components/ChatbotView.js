@@ -1,12 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
-import { doc, getDoc, setDoc, arrayUnion } from 'firebase/firestore';
-import { onAuthStateChanged } from 'firebase/auth';
-import { db, auth } from '../app/lib/firebaseConfig'; 
 
 export default function ChatbotView({ smeProfile }) {
-  // Defensive sanitization: ensure smeProfile is never null during evaluation
   const profile = smeProfile || {};
   
   const [messages, setMessages] = useState([]);
@@ -17,30 +13,12 @@ export default function ChatbotView({ smeProfile }) {
   const startupName = profile.startupName || "your venture";
   const industry = profile.industry || "FinTech";
 
-  // 1. LISTEN FOR AUTH CONFIRMATION, THEN LOAD MEMORY
+  // 1. INITIALIZE WELCOME MESSAGE LOCALLY (NO FIRESTORE CALLS)
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        try {
-          const docRef = doc(db, "smes", user.uid);
-          const docSnap = await getDoc(docRef);
-          
-          // CRITICAL FIXED VALIDATION: Explicitly verify it is a valid Array to prevent .map() crashes
-          if (docSnap.exists() && docSnap.data().chatHistory && Array.isArray(docSnap.data().chatHistory)) {
-            setMessages(docSnap.data().chatHistory);
-          } else {
-            setMessages([{
-              role: 'assistant',
-              content: `Selamat sejahtera! I am your MyKabel Advisor. I have synchronized with your profile details for ${startupName}. Ask me anything about navigating your next steps in the ${industry} ecosystem!`
-            }]);
-          }
-        } catch (err) {
-          console.error("Error pulling chat memory loops:", err);
-        }
-      }
-    });
-
-    return () => unsubscribe();
+    setMessages([{
+      role: 'assistant',
+      content: `Selamat sejahtera! I am your MyKabel Advisor. I have synchronized with your profile details for ${startupName}. Ask me anything about navigating your next steps in the ${industry} ecosystem!`
+    }]);
   }, [startupName, industry]);
 
   useEffect(() => {
@@ -49,7 +27,7 @@ export default function ChatbotView({ smeProfile }) {
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (!input.trim() || !auth.currentUser) return;
+    if (!input.trim()) return;
 
     const userMessage = { role: 'user', content: input };
     setMessages(prev => [...prev, userMessage]);
@@ -57,12 +35,7 @@ export default function ChatbotView({ smeProfile }) {
     setLoading(true);
 
     try {
-      const userDocRef = doc(db, "smes", auth.currentUser.uid);
-      
-      await setDoc(userDocRef, {
-        chatHistory: arrayUnion(userMessage)
-      }, { merge: true });
-
+      // Secretly package context to keep backend Gemini persona locked in
       const enrichedHistory = [
         { 
           role: 'system', 
@@ -86,11 +59,8 @@ export default function ChatbotView({ smeProfile }) {
       const data = await response.json();
       const assistantMessage = { role: 'assistant', content: data.reply };
 
+      // Update local state UI only
       setMessages(prev => [...prev, assistantMessage]);
-
-      await setDoc(userDocRef, {
-        chatHistory: arrayUnion(assistantMessage)
-      }, { merge: true });
 
     } catch (err) {
       console.error("Chat sync crash:", err);
@@ -112,8 +82,8 @@ export default function ChatbotView({ smeProfile }) {
             Context Locked: <span className="text-amber-400">{startupName}</span>
           </p>
         </div>
-        <span className="text-[9px] font-black tracking-widest text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded uppercase">
-          Memory Synced to Cloud 🌐
+        <span className="text-[9px] font-black tracking-widest text-amber-500 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded uppercase">
+          Session Active ⚡
         </span>
       </div>
 
