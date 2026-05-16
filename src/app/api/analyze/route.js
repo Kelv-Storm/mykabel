@@ -6,24 +6,24 @@ export const maxDuration = 60;
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { startupName, sector, stage, teamSize, fundingNeededMin, fundingNeededMax, lookingFor } = body;
+    const { startupName, sector, stage, teamSize, fundingNeededMin, fundingNeededMax, description } = body;
 
     const prompt = `
       You are the core intelligence matching routing module for "MyKabel", an enterprise SME matching engine in Malaysia.
       Analyze the following startup profile telemetry:
       - Startup Name: ${startupName}
+      - Business Description: ${description} 
       - Sector Focus: ${sector}
       - Growth Phase Stage: ${stage}
       - Active Team Size: ${teamSize} members
       - Funding Target Window: RM ${fundingNeededMin}K to RM ${fundingNeededMax}K
-      - Seeking Channels: ${lookingFor.join(', ')}
 
-      Based on this data, generate exactly 7 highly relevant, unique, and realistic entities in the Malaysian venture/SME ecosystem. 
-      Mix them across appropriate categories (choose from Gobi Partners, Cradle Fund, Artem Ventures, NEXEA, Sunway iLabs, MTDC, MRANTI, pitchIN, 1337 Ventures, ScaleUp Malaysia, or MDEC grants).
+      Based on this data, generate ALL highly relevant, unique, and realistic entity matches in the Malaysian venture/SME ecosystem. Do not limit the output to a specific number—if there are 12 perfect matches, generate all 12. Prioritize quality and relevance. 
+      Mix them across appropriate categories (choose from Gobi Partners, Cradle Fund, Artem Ventures, NEXEA, Sunway iLabs, MTDC, MRANTI, pitchIN, 1337 Ventures, ScaleUp Malaysia, or MDEC grants, or other accurate Malaysian funds).
 
       CRITICAL METRICS INSTRUCTIONS:
-      - "opportunitiesCount": Generate a realistic integer (between 8 and 45) representing the estimated total active programs/grants available in Malaysia for this specific sector.
-      - "connectionsCount": Generate a realistic integer (between 1 and 6) representing immediate warm lead potential.
+      - "opportunitiesCount": Generate a realistic integer representing the estimated total active programs/grants available in Malaysia for this specific sector.
+      - "connectionsCount": Generate a realistic integer representing immediate warm lead potential.
 
       CRITICAL LINK INSTRUCTIONS: For each matched entity, you must provide accurate URL strings corresponding to their live registration portals and informational FAQ pages. Use these exact domain routes where applicable:
       - Cradle Fund: portalUrl "https://cradle.com.my/cip-spark/" | faqUrl "https://cradle.com.my/cip-spark/"
