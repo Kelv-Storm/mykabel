@@ -75,7 +75,7 @@ export default function StartupIntakeForm({ onComplete }) {
       setTimeout(() => {
         if (onComplete) onComplete();
         window.location.reload(); 
-      }, 1500);
+      }, 0);
 
     } catch (error) {
       console.error("Pipeline Error:", error);
