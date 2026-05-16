@@ -201,4 +201,28 @@ export default function StartupIntakeForm({ onComplete }) {
           </div>
 
           <div className="flex justify-between pt-6 border-t border-slate-800/50">
-            <button onClick={() => setStep(1)} className="text-slate-
+            <button onClick={() => setStep(1)} className="text-slate-400 hover:text-white font-bold px-4 py-3 tracking-wider uppercase transition-colors">
+              &larr; Back
+            </button>
+            <button onClick={processAndSync} className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-8 py-3 rounded-xl tracking-wider uppercase transition-all shadow-[0_0_15px_rgba(245,158,11,0.4)]">
+              Calculate Matches &rarr;
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* STEP 3 */}
+      {step === 3 && (
+        <div className="text-center py-12 animate-in zoom-in duration-500">
+          <div className="w-20 h-20 bg-emerald-500/20 border border-emerald-500/50 rounded-full flex items-center justify-center mx-auto mb-6">
+            <svg className="w-10 h-10 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <h2 className="text-3xl font-black text-white tracking-tight mb-2">Matrix Synchronized</h2>
+          <p className="text-slate-400 text-sm">Initializing your personalized dashboard...</p>
+        </div>
+      )}
+    </div>
+  );
+}
