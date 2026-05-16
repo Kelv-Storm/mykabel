@@ -35,11 +35,10 @@ export default function ChatbotView({ smeProfile }) {
     setLoading(true);
 
     try {
-      // Secretly package context to keep backend Gemini persona locked in
       const enrichedHistory = [
         { 
           role: 'system', 
-          content: `CRITICAL CONTEXT: You are advising a startup named "${startupName}" in the "${industry}" industry. Always tailor your advice specifically to their industry and scale.` 
+          content: `CRITICAL CONTEXT: You are advising a startup named "${startupName}" in the "${industry}" industry.` 
         },
         ...messages, 
         userMessage
@@ -55,16 +54,20 @@ export default function ChatbotView({ smeProfile }) {
         }),
       });
 
-      if (!response.ok) throw new Error("Neural generation channel dropped");
+      // 🚨 DIAGNOSTIC UPDATE: Grab the real error details from the backend
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.details || errorData.error || `Server Status ${response.status}`);
+      }
+      
       const data = await response.json();
       const assistantMessage = { role: 'assistant', content: data.reply };
-
-      // Update local state UI only
       setMessages(prev => [...prev, assistantMessage]);
 
     } catch (err) {
       console.error("Chat sync crash:", err);
-      setMessages(prev => [...prev, { role: 'assistant', content: "System connection latency detected. Please retry transmission." }]);
+      // 🚨 PRINTS THE ACTUAL CRASH REASON DIRECTLY IN THE UI
+      setMessages(prev => [...prev, { role: 'assistant', content: `🚨 PIPELINE CRASH: ${err.message}` }]);
     } finally {
       setLoading(false);
     }
