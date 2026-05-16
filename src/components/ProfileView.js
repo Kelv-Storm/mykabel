@@ -4,8 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { doc, getDoc } from 'firebase/firestore';
 import { db, auth } from '../app/lib/firebaseConfig';
 
-// THE BACKUP FAILSAFE: If the API limits out, judges see this instead of a blank box
-const BACKUP_NEWS = {
+// STATIC NEWS DICTIONARY - Zero API calls made
+const STATIC_NEWS = {
   'FinTech': [
     { source: "The Edge Malaysia", title: "Funding Tide Turns for Local FinTech Players as Capital Outflows Stabilize in KL", url: "#" },
     { source: "The Star", title: "Bank Negara Unveils New Sandbox Parameters for Early-Stage Digital Finance", url: "#" }
@@ -31,9 +31,7 @@ const BACKUP_NEWS = {
 export default function ProfileView() {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
-  
   const [news, setNews] = useState([]);
-  const [newsLoading, setNewsLoading] = useState(true);
 
   useEffect(() => {
     const fetchProfileData = async () => {
@@ -46,36 +44,14 @@ export default function ProfileView() {
         if (docSnap.exists()) {
           const profileData = docSnap.data();
           setProfile(profileData);
-          setLoading(false);
-
-          // Fetch Live News with an ironclad fallback
-          let fetchedNews = [];
-          try {
-            const newsRes = await fetch('/api/news', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ sector: profileData.sector })
-            });
-            
-            if (newsRes.ok) {
-              const liveNews = await newsRes.json();
-              if (Array.isArray(liveNews) && liveNews.length > 0) {
-                fetchedNews = liveNews;
-              }
-            }
-          } catch (err) {
-            console.error("Live news API failed or rate limited. Triggering failsafe.");
-          } finally {
-            // If the array is still empty (due to crash or quota limit), inject the backup news
-            if (fetchedNews.length === 0) {
-              fetchedNews = BACKUP_NEWS[profileData.sector] || BACKUP_NEWS['FinTech'];
-            }
-            setNews(fetchedNews);
-            setNewsLoading(false);
-          }
+          
+          // Instantly load the static news based on their chosen sector
+          const sectorNews = STATIC_NEWS[profileData.sector] || STATIC_NEWS['FinTech'];
+          setNews(sectorNews);
         }
       } catch (error) {
         console.error("Error fetching dashboard telemetry:", error);
+      } finally {
         setLoading(false);
       }
     };
@@ -102,7 +78,7 @@ export default function ProfileView() {
         <p className="text-sm text-slate-400 font-medium">Real-time status analysis telemetry loops.</p>
       </div>
 
-      {/* Top Grid: Metrics & LIVE News */}
+      {/* Top Grid: Metrics & Static News */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Total Matches Metric */}
@@ -113,38 +89,31 @@ export default function ProfileView() {
           </span>
         </div>
 
-        {/* Live Internet News Wire */}
+        {/* Static Market Intelligence Wire */}
         <div className="lg:col-span-2 bg-slate-900/40 border border-white/5 p-6 rounded-2xl shadow-xl flex flex-col">
           <div className="flex justify-between items-center mb-6">
             <h3 className="text-sm font-black text-white tracking-widest flex items-center gap-2 uppercase">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              Live Market Intelligence Wire
+              Market Intelligence Wire
             </h3>
             <span className="bg-slate-800 text-slate-300 text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-wider border border-slate-700/50">
               {profile.sector} Focus
             </span>
           </div>
           
-          {newsLoading ? (
-            <div className="flex-1 flex flex-col items-center justify-center space-y-3 opacity-70">
-               <div className="w-6 h-6 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
-               <span className="text-[10px] text-amber-500 font-black tracking-widest uppercase">Scanning Live Web...</span>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {news.map((item, idx) => (
-                <div key={idx} className="bg-slate-950/50 border border-slate-800/60 p-5 rounded-xl hover:border-amber-500/30 transition-colors flex flex-col justify-between">
-                  <h4 className="text-sm font-bold text-white mb-3 leading-snug">{item.title}</h4>
-                  <div className="flex justify-between items-center mt-auto pt-4 border-t border-slate-800/50">
-                    <span className="text-[10px] text-slate-500 font-semibold">{item.source}</span>
-                    <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-400 font-bold hover:text-blue-300 cursor-pointer transition-colors">
-                      Read Wire ↗
-                    </a>
-                  </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {news.map((item, idx) => (
+              <div key={idx} className="bg-slate-950/50 border border-slate-800/60 p-5 rounded-xl hover:border-amber-500/30 transition-colors flex flex-col justify-between">
+                <h4 className="text-sm font-bold text-white mb-3 leading-snug">{item.title}</h4>
+                <div className="flex justify-between items-center mt-auto pt-4 border-t border-slate-800/50">
+                  <span className="text-[10px] text-slate-500 font-semibold">{item.source}</span>
+                  <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-400 font-bold hover:text-blue-300 cursor-pointer transition-colors">
+                    Read Wire ↗
+                  </a>
                 </div>
-              ))}
-            </div>
-          )}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
