@@ -26,13 +26,22 @@ export async function POST(request) {
       `;
     }
 
-    // Clean, natural history alternation mapping
-    const contents = messages.map(msg => ({
+    // 🚨 BULLETPROOF SANITIZATION: Filter out raw system/metadata roles passed from the frontend
+    const validMessages = messages.filter(msg => msg.role === 'user' || msg.role === 'assistant' || msg.role === 'model');
+
+    // 🚨 THE GEMINI API RULE FIX: The chat history MUST start with a 'user' turn.
+    // If the local welcome message sits at index 0, shift it out so the API doesn't throw a validation fault.
+    if (validMessages.length > 0 && (validMessages[0].role === 'assistant' || validMessages[0].role === 'model')) {
+      validMessages.shift();
+    }
+
+    // Map the sanitized history cleanly into structural API expectations
+    const contents = validMessages.map(msg => ({
       role: msg.role === 'user' ? 'user' : 'model',
       parts: [{ text: msg.content || '' }] 
     }));
 
-    // 🚨 BULLETPROOF FIX: Use the official root-level systemInstruction parameter
+    // Package your core system instruction configurations securely
     const systemInstructionText = `System Persona: You are 'MyKabel Advisor', a highly friendly, empathetic, and human-like business mentor helping SMEs in Malaysia.
 You are currently chatting with the founder of this business:
 ${contextTelemetry}
@@ -65,8 +74,6 @@ CRITICAL INSTRUCTIONS FOR YOUR BEHAVIOR:
     }
 
     const resData = await response.json();
-    
-    // Safety check parsing response paths
     const replyText = resData?.candidates?.[0]?.content?.parts?.[0]?.text || "I am processing your startup details. Please ask your question again!";
 
     return NextResponse.json({ reply: replyText });
