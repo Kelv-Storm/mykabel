@@ -14,6 +14,7 @@ export async function POST(request) {
     const messages = history || [];
     const smeProfile = profile || null;
 
+    // Map out context anchors if the profile exists
     let contextTelemetry = "The user hasn't provided details yet.";
     if (smeProfile) {
       contextTelemetry = `
