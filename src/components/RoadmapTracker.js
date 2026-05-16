@@ -24,7 +24,7 @@ export default function RoadmapTracker() {
       category: 'LEGAL', 
       title: 'Draft Initial Cap Table', 
       completed: true,
-      link: 'https://wefunder.com/cap-table' // <-- Added Link
+      link: 'https://www.cakeequity.com/' 
     },
     { 
       id: 4, 
