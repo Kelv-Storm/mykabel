@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { doc, getDoc, updateDoc, arrayUnion } from 'firebase/firestore';
-import { db, auth } from '../app/lib/firebaseConfig'; // Verified configuration path 
+import { onAuthStateChanged } from 'firebase/auth';
+import { db, auth } from '../app/lib/firebaseConfig'; 
 
 export default function ChatbotView({ smeProfile = {} }) {
   const [messages, setMessages] = useState([]);
@@ -13,45 +14,40 @@ export default function ChatbotView({ smeProfile = {} }) {
   const startupName = smeProfile?.startupName || "your venture";
   const industry = smeProfile?.industry || "FinTech";
 
-  // 1. INITIALIZE & LOAD HISTORICAL MEMORY FROM FIRESTORE ON MOUNT
+  // 1. LISTEN FOR AUTH CONFIRMATION, THEN LOAD MEMORY
   useEffect(() => {
-    async function loadChatMemory() {
-      if (!auth.currentUser) return;
-      try {
-        const docRef = doc(db, "smes", auth.currentUser.uid);
-        const docSnap = await getDoc(docRef);
-        
-        if (docSnap.exists() && docSnap.data().chatHistory) {
-          setMessages(docSnap.data().chatHistory);
-        } else {
-          // System greeting baseline if no history exists yet
-          setMessages([
-            {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        try {
+          const docRef = doc(db, "smes", user.uid);
+          const docSnap = await getDoc(docRef);
+          
+          if (docSnap.exists() && docSnap.data().chatHistory && docSnap.data().chatHistory.length > 0) {
+            setMessages(docSnap.data().chatHistory);
+          } else {
+            setMessages([{
               role: 'assistant',
               content: `Selamat sejahtera! I am your MyKabel Advisor. I have synchronized with your profile details for ${startupName}. Ask me anything about navigating your next steps in the ${industry} ecosystem!`
-            }
-          ]);
+            }]);
+          }
+        } catch (err) {
+          console.error("Error pulling chat memory loops:", err);
         }
-      } catch (err) {
-        console.error("Error pulling chat memory loops:", err);
       }
-    }
-    loadChatMemory();
+    });
+
+    return () => unsubscribe(); // Cleanup listener on unmount
   }, [startupName, industry]);
 
-  // Auto-scroll mechanics to keep view focused on the latest packets
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // 2. DISPATCH MESSAGE & SAVE TO CLOUD MEMORY STACK
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!input.trim() || !auth.currentUser) return;
 
     const userMessage = { role: 'user', content: input };
-    
-    // Optimistically update local state UI array
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setLoading(true);
@@ -59,31 +55,28 @@ export default function ChatbotView({ smeProfile = {} }) {
     try {
       const userDocRef = doc(db, "smes", auth.currentUser.uid);
       
-      // Save user's question to Firestore memory immediately
+      // Save User Message immediately
       await updateDoc(userDocRef, {
         chatHistory: arrayUnion(userMessage)
       });
 
-      // Pass full conversation stream to your API so the AI model reads the context memory
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           message: userMessage.content,
-          history: [...messages, userMessage], // 👈 SENDS ENTIRE PAST CONVERSATION TO AI FOR TRUE MEMORY
+          history: [...messages, userMessage],
           profile: smeProfile 
         }),
       });
 
       if (!response.ok) throw new Error("Neural generation channel dropped");
       const data = await response.json();
-      
       const assistantMessage = { role: 'assistant', content: data.reply };
 
-      // Update local state UI
       setMessages(prev => [...prev, assistantMessage]);
 
-      // Save assistant's response to Firestore memory
+      // Save Assistant Message
       await updateDoc(userDocRef, {
         chatHistory: arrayUnion(assistantMessage)
       });
@@ -98,8 +91,6 @@ export default function ChatbotView({ smeProfile = {} }) {
 
   return (
     <div className="flex flex-col h-[78vh] bg-slate-900/20 border border-white/5 rounded-3xl overflow-hidden backdrop-blur-xl shadow-2xl animate-in fade-in duration-500">
-      
-      {/* Dynamic Header Displaying Context States */}
       <div className="bg-slate-950/60 border-b border-white/5 p-4 flex justify-between items-center px-6">
         <div>
           <h3 className="text-sm font-black text-white uppercase tracking-wider flex items-center gap-2">
@@ -107,15 +98,14 @@ export default function ChatbotView({ smeProfile = {} }) {
             AI Advisory Lounge
           </h3>
           <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">
-            Context Locked: <span className="text-amber-400">{startupName}</span> ({industry})
+            Context Locked: <span className="text-amber-400">{startupName}</span>
           </p>
         </div>
         <span className="text-[9px] font-black tracking-widest text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded uppercase">
-          Memory State Linked 🌐
+          Memory Synced to Cloud 🌐
         </span>
       </div>
 
-      {/* Message Output Terminal Stream */}
       <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar bg-gradient-to-b from-transparent to-slate-950/20">
         {messages.map((msg, idx) => (
           <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2 duration-200`}>
@@ -138,14 +128,13 @@ export default function ChatbotView({ smeProfile = {} }) {
         <div ref={chatEndRef} />
       </div>
 
-      {/* Input Action Form Tray */}
       <form onSubmit={handleSendMessage} className="p-4 bg-slate-950/40 border-t border-white/5 flex gap-3 px-6 items-center">
         <input 
           type="text" 
           value={input}
           onChange={(e) => setInput(e.target.value)}
           disabled={loading}
-          placeholder={`Ask specific strategic questions about expanding your ${industry} business...`}
+          placeholder={`Ask specific strategic questions...`}
           className="flex-1 bg-slate-950 border border-slate-800 text-white rounded-xl p-4 text-xs focus:border-amber-500 focus:outline-none placeholder-slate-600 transition-colors"
         />
         <button 
@@ -156,7 +145,6 @@ export default function ChatbotView({ smeProfile = {} }) {
           Consult
         </button>
       </form>
-
     </div>
   );
 }
