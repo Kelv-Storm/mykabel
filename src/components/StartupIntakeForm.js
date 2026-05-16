@@ -2,215 +2,223 @@
 
 import React, { useState } from 'react';
 import { doc, setDoc } from 'firebase/firestore';
-import { db, auth } from '../app/lib/firebaseConfig'; // Adjust import path to match your project structure
+import { db, auth } from '../app/lib/firebaseConfig';
 
-export default function StartupIntakeForm({ onSubmitSuccess }) {
-  const [currentStep, setCurrentStep] = useState(1);
-  const [loading, setLoading] = useState(false);
-  
-  // Form State Variables
+export default function StartupIntakeForm({ onComplete }) {
+  const [step, setStep] = useState(1);
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState(null);
+
+  // Updated state matching your new field requirements
   const [formData, setFormData] = useState({
     startupName: '',
-    founderName: '',
-    companyEmail: '',
-    companyDescription: '', // 👈 NEW VALUE FOR SCREENSHOT 2
-    industry: 'FinTech',
-    stage: 'Ideation',
-    monthlyBurn: '12000',
-    currentCash: '35000'
+    lookingFor: '',
+    sector: 'FinTech',
+    stage: 'Ideation / MVP Concept',
+    teamSize: '1-5',
+    fundingMin: '',
+    fundingMax: ''
   });
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleNext = () => {
-    if (currentStep < 3) setCurrentStep(prev => prev + 1);
-  };
-
-  const handlePrev = () => {
-    if (currentStep > 1) setCurrentStep(prev => prev - 1);
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!auth.currentUser) return;
+  const processAndSync = async () => {
+    setIsLoading(true);
+    setErrorMsg(null);
 
     try {
-      setLoading(true);
-      
-      // Save data securely to Firestore under the authenticated user's profile
-      await setDoc(doc(db, "smes", auth.currentUser.uid), {
+      if (!auth.currentUser) throw new Error("Authentication missing. Please reload.");
+
+      // 1. Sanitize string into a clean array to prevent dashboard split() crashes
+      const cleanedLookingFor = formData.lookingFor
+        .split(',')
+        .map(item => item.trim())
+        .filter(item => item !== "");
+
+      const telemetryPacket = {
         ...formData,
-        isRegistered: false, // Baseline parameter
-        metrics: { matches: 7, opportunities: 32, connections: 3 },
-        // Pre-populating matches for the demo flow loop
-        recommendations: [
-          { name: "Cradle Fund", type: "Grant Provider", matchScore: "98%", focus: formData.industry, stage: formData.stage, ticketSize: "RM 50K - RM 500K (via programs)", explanation: `Perfect structural alignment with your profile details focusing on early developmental milestone parameters.`, faqUrl: "https://www.cradle.com.my/" },
-          { name: "1337 Ventures", type: "Accelerator / Pre-Seed Investor", matchScore: "95%", focus: formData.industry, stage: formData.stage, ticketSize: "RM 50K - RM 150K (as part of accelerator)", explanation: `Strategic fit: Your targeted product profile plugs an active structural sector deficit in their existing fund portfolio track.`, faqUrl: "https://1337.ventures/" },
-          { name: "MDEC", type: "Government Grants / Agency", matchScore: "90%", focus: formData.industry, stage: formData.stage, ticketSize: "Varies, typically RM 50K-RM 500K for relevant grants", explanation: `Strong candidate matching national digitalization framework deployment tracks for emerging business architectures.`, faqUrl: "https://mdec.my/" }
-        ]
+        lookingFor: cleanedLookingFor,
+        setupComplete: true,
+        createdAt: new Date().toISOString()
+      };
+
+      // 2. Save core profile to Firebase immediately
+      await setDoc(doc(db, "smes", auth.currentUser.uid), telemetryPacket, { merge: true });
+
+      // 3. Trigger the AI Analysis Pipeline
+      const response = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(telemetryPacket)
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.details || `Server Error ${response.status}: AI timeout or token limit reached.`);
+      }
+
+      const matchData = await response.json();
+
+      // 4. Save AI generated matches back to the profile
+      await setDoc(doc(db, "smes", auth.currentUser.uid), { 
+        recommendations: matchData.recommendations,
+        metrics: { matches: matchData.recommendations?.length || 0 }
       }, { merge: true });
 
-      if (onSubmitSuccess) onSubmitSuccess();
-    } catch (err) {
-      console.error("Error saving onboard metrics:", err);
+      // Success! Move to Step 3 briefly before triggering the dashboard load
+      setStep(3);
+      setTimeout(() => {
+        if (onComplete) onComplete();
+      }, 1500);
+
+    } catch (error) {
+      console.error("Pipeline Error:", error);
+      // Clean UI error instead of an ugly window.alert
+      setErrorMsg(error.message.includes("JSON") 
+        ? "The AI model timed out while generating matches. Please hit retry." 
+        : error.message);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
+  // --- STYLING VARS ---
+  const inputStyle = "w-full bg-slate-950/50 border border-slate-800 rounded-xl p-4 text-sm text-white focus:border-amber-500 outline-none transition-all";
+  const labelStyle = "text-[11px] font-black text-slate-500 uppercase tracking-widest block mb-2";
+
+  // --- LOADING STATE (Replicating your black screen) ---
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[500px] animate-in fade-in duration-500">
+        <h2 className="text-xl font-black text-amber-500 tracking-widest uppercase animate-pulse mb-4">
+          Syncing Cloud Matrix...
+        </h2>
+        <div className="w-48 h-1 bg-slate-900 rounded-full overflow-hidden">
+          <div className="h-full bg-amber-500 w-1/2 animate-[ping_1.5s_inifinite_ease-in-out]" />
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="max-w-3xl mx-auto bg-slate-900/20 border border-white/5 rounded-3xl p-8 backdrop-blur-xl shadow-2xl animate-in fade-in duration-500">
+    <div className="max-w-4xl mx-auto p-8 bg-slate-900/40 border border-white/5 rounded-3xl shadow-2xl backdrop-blur-md">
       
-      {/* Wizard Progress Steps Bar Header */}
-      <div className="flex items-center justify-center gap-8 mb-10 border-b border-white/5 pb-6 text-xs font-bold uppercase tracking-wider">
-        <div className={`flex items-center gap-2 ${currentStep === 1 ? 'text-amber-500' : 'text-slate-500'}`}>
-          <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${currentStep === 1 ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-400'}`}>1</span>
-          <span>Basic Info</span>
+      {/* Top Stepper UI */}
+      <div className="flex items-center justify-center gap-4 mb-12">
+        <div className={`flex items-center gap-2 ${step >= 1 ? 'text-amber-500' : 'text-slate-600'}`}>
+          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${step >= 1 ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-500'}`}>1</div>
+          <span className="text-xs font-bold uppercase tracking-wider">Basic Info</span>
         </div>
-        <div className="w-12 h-0.5 bg-slate-800" />
-        <div className={`flex items-center gap-2 ${currentStep === 2 ? 'text-amber-500' : 'text-slate-500'}`}>
-          <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${currentStep === 2 ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-400'}`}>2</span>
-          <span>Startup Info</span>
+        <div className={`w-16 h-px ${step >= 2 ? 'bg-amber-500/50' : 'bg-slate-800'}`} />
+        <div className={`flex items-center gap-2 ${step >= 2 ? 'text-amber-500' : 'text-slate-600'}`}>
+          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${step >= 2 ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-500'}`}>2</div>
+          <span className="text-xs font-bold uppercase tracking-wider">Startup Info</span>
         </div>
-        <div className="w-12 h-0.5 bg-slate-800" />
-        <div className={`flex items-center gap-2 ${currentStep === 3 ? 'text-amber-500' : 'text-slate-500'}`}>
-          <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${currentStep === 3 ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-400'}`}>3</span>
-          <span>Review & Match</span>
+        <div className={`w-16 h-px ${step >= 3 ? 'bg-amber-500/50' : 'bg-slate-800'}`} />
+        <div className={`flex items-center gap-2 ${step >= 3 ? 'text-amber-500' : 'text-slate-600'}`}>
+          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${step >= 3 ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-500'}`}>3</div>
+          <span className="text-xs font-bold uppercase tracking-wider">Review & Match</span>
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        
-        {/* STEP 1: BASIC INFO BLOCK */}
-        {currentStep === 1 && (
-          <div className="space-y-6 animate-in fade-in duration-300">
-            <div>
-              <h3 className="text-xl font-black text-white tracking-tight mb-1">Basic Info</h3>
-              <p className="text-xs text-slate-500">Introduce your startup profile identifier variables.</p>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">Startup Name</label>
-                <input type="text" name="startupName" value={formData.startupName} onChange={handleChange} required placeholder="e.g., Ahmad Frozen Foods"
-                  className="w-full bg-slate-950 border border-slate-800 text-white rounded-xl p-4 focus:border-amber-500 focus:outline-none placeholder-slate-700 text-sm transition-colors" />
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">Founder Name</label>
-                <input type="text" name="founderName" value={formData.founderName} onChange={handleChange} required placeholder="e.g., Ahmad Bin Ibrahim"
-                  className="w-full bg-slate-950 border border-slate-800 text-white rounded-xl p-4 focus:border-amber-500 focus:outline-none placeholder-slate-700 text-sm transition-colors" />
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">Company Email</label>
-                <input type="email" name="companyEmail" value={formData.companyEmail} onChange={handleChange} required placeholder="founder@startup.com.my"
-                  className="w-full bg-slate-950 border border-slate-800 text-white rounded-xl p-4 focus:border-amber-500 focus:outline-none placeholder-slate-700 text-sm transition-colors" />
-              </div>
-
-              {/* 👇 NEW DETAILED DESCRIPTION TEXTAREA LAYER 👇 */}
-              <div>
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">Company Description</label>
-                <textarea name="companyDescription" value={formData.companyDescription} onChange={handleChange} required rows={4} 
-                  placeholder="e.g., A peer-to-peer micro-lending platform tailored for rural micro-entrepreneurs in Northern Malaysia, utilizing alternative credit scoring structures..."
-                  className="w-full bg-slate-950 border border-slate-800 text-white rounded-xl p-4 focus:border-amber-500 focus:outline-none placeholder-slate-700 text-sm transition-colors custom-scrollbar resize-none leading-relaxed" />
-                <span className="text-[10px] text-slate-500 mt-1.5 block leading-normal">
-                  Provide detailed operational parameters. This input is directly parsed by the AI processing loop to pinpoint highly specified, niche ecosystem investors and customize your live market news stream.
-                </span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* STEP 2: STARTUP PARAMETERS */}
-        {currentStep === 2 && (
-          <div className="space-y-6 animate-in fade-in duration-300">
-            <div>
-              <h3 className="text-xl font-black text-white tracking-tight mb-1">Financial & Vertical Footprint</h3>
-              <p className="text-xs text-slate-500">Configure operational thresholds for your matrix calculation pipelines.</p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">Industry Vertical</label>
-                <select name="industry" value={formData.industry} onChange={handleChange} className="w-full bg-slate-950 border border-slate-800 text-white rounded-xl p-4 focus:border-amber-500 focus:outline-none text-sm cursor-pointer">
-                  <option value="FinTech">FinTech</option>
-                  <option value="AgriTech">AgriTech</option>
-                  <option value="E-Commerce">E-Commerce</option>
-                  <option value="HealthTech">HealthTech</option>
-                  <option value="B2B Enterprise SaaS">B2B Enterprise SaaS</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">Current Growth Stage</label>
-                <select name="stage" value={formData.stage} onChange={handleChange} className="w-full bg-slate-950 border border-slate-800 text-white rounded-xl p-4 focus:border-amber-500 focus:outline-none text-sm cursor-pointer">
-                  <option value="Ideation">Ideation / MVP Concept</option>
-                  <option value="Pre-Seed">Pre-Seed / Prototype Ready</option>
-                  <option value="Seed">Seed Stage / Scaling Revenue</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">Current Cash Reserves (RM)</label>
-                <input type="number" name="currentCash" value={formData.currentCash} onChange={handleChange} required
-                  className="w-full bg-slate-950 border border-slate-800 text-white rounded-xl p-4 focus:border-amber-500 focus:outline-none text-sm" />
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">Monthly Operational Burn (RM)</label>
-                <input type="number" name="monthlyBurn" value={formData.monthlyBurn} onChange={handleChange} required
-                  className="w-full bg-slate-950 border border-slate-800 text-white rounded-xl p-4 focus:border-amber-500 focus:outline-none text-sm" />
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* STEP 3: DATA VERIFICATION REVIEW */}
-        {currentStep === 3 && (
-          <div className="space-y-6 animate-in fade-in duration-300">
-            <div>
-              <h3 className="text-xl font-black text-white tracking-tight mb-1">Confirm System Onboarding</h3>
-              <p className="text-xs text-slate-500">Verify your telemetry configuration metrics before launching the neural match vectors.</p>
-            </div>
-
-            <div className="bg-slate-950/50 border border-white/5 rounded-2xl p-6 text-xs space-y-3 font-medium text-slate-400">
-              <div><span className="text-slate-500 font-bold uppercase tracking-wider inline-block w-36">Venture:</span> <span className="text-white">{formData.startupName}</span></div>
-              <div><span className="text-slate-500 font-bold uppercase tracking-wider inline-block w-36">Vertical Core:</span> <span className="text-white">{formData.industry}</span></div>
-              <div><span className="text-slate-500 font-bold uppercase tracking-wider inline-block w-36">Current Growth:</span> <span className="text-white">{formData.stage}</span></div>
-              <div><span className="text-slate-500 font-bold uppercase tracking-wider inline-block w-36">Cash Baseline:</span> <span className="text-emerald-400">RM {Number(formData.currentCash).toLocaleString()}</span></div>
-              <div><span className="text-slate-500 font-bold uppercase tracking-wider inline-block w-36">Burn Rate Focus:</span> <span className="text-red-400">RM {Number(formData.monthlyBurn).toLocaleString()} / month</span></div>
-              <div className="pt-2 border-t border-slate-800/80 leading-relaxed">
-                <span className="text-slate-500 font-bold uppercase tracking-wider block mb-1">Description Sync:</span>
-                <p className="text-slate-300 italic">"{formData.companyDescription}"</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* CONTROLS FOOTER BLOCK */}
-        <div className="flex justify-between items-center pt-6 border-t border-white/5">
-          {currentStep > 1 ? (
-            <button type="button" onClick={handlePrev} className="text-xs font-bold uppercase tracking-wider text-slate-400 hover:text-white transition-colors px-4 py-2">
-              ← Back
-            </button>
-          ) : <div />}
-
-          {currentStep < 3 ? (
-            <button type="button" onClick={handleNext} className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-8 py-3 rounded-xl text-xs tracking-wider uppercase shadow-lg shadow-amber-500/10 transition-all">
-              Next Step →
-            </button>
-          ) : (
-            <button type="submit" disabled={loading} className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black px-10 py-3.5 rounded-xl text-xs tracking-widest uppercase shadow-xl transition-all disabled:opacity-50">
-              {loading ? 'Initializing Channels...' : 'Execute AI Matching 🚀'}
-            </button>
-          )}
+      {errorMsg && (
+        <div className="mb-8 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm font-semibold flex items-center justify-between">
+          <span>🚨 Pipeline Failed: {errorMsg}</span>
         </div>
+      )}
 
-      </form>
+      {/* STEP 1 */}
+      {step === 1 && (
+        <div className="space-y-8 animate-in slide-in-from-right-4 duration-300">
+          <div>
+            <h2 className="text-3xl font-black text-white tracking-tight mb-2">Entity Initialization</h2>
+            <p className="text-slate-400 text-sm">Define your core enterprise identity and objectives.</p>
+          </div>
+          
+          <div className="grid grid-cols-1 gap-6">
+            <div>
+              <label className={labelStyle}>Startup / Entity Name</label>
+              <input type="text" name="startupName" value={formData.startupName} onChange={handleChange} placeholder="e.g. MyKabel Technologies Sdn Bhd" className={inputStyle} />
+            </div>
+            <div>
+              <label className={labelStyle}>Matching Objectives (Comma Separated)</label>
+              <input type="text" name="lookingFor" value={formData.lookingFor} onChange={handleChange} placeholder="e.g. Pre-Seed Investors, Technical Co-founder, Government Grants" className={inputStyle} />
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-6">
+            <button onClick={() => setStep(2)} disabled={!formData.startupName} className="bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-black px-8 py-3 rounded-xl tracking-wider uppercase transition-all">
+              Next Step &rarr;
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* STEP 2 */}
+      {step === 2 && (
+        <div className="space-y-8 animate-in slide-in-from-right-4 duration-300">
+          <div>
+            <h2 className="text-3xl font-black text-white tracking-tight mb-2">Financial & Vertical Footprint</h2>
+            <p className="text-slate-400 text-sm">Configure operational thresholds for your matrix calculation pipelines.</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className={labelStyle}>Industry Vertical</label>
+              <select name="sector" value={formData.sector} onChange={handleChange} className={`${inputStyle} appearance-none`}>
+                {['FinTech', 'HealthTech', 'E-Commerce', 'AgriTech', 'SaaS'].map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={labelStyle}>Current Growth Stage</label>
+              <select name="stage" value={formData.stage} onChange={handleChange} className={`${inputStyle} appearance-none`}>
+                {['Ideation / MVP Concept', 'Pre-Seed', 'Seed', 'Series A'].map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            
+            {/* NEW FIELDS REQUESTED */}
+            <div>
+              <label className={labelStyle}>Active Team Size</label>
+              <select name="teamSize" value={formData.teamSize} onChange={handleChange} className={`${inputStyle} appearance-none`}>
+                {['1-5', '6-10', '11-20', '21-50', '50+'].map(s => <option key={s} value={s}>{s} members</option>)}
+              </select>
+            </div>
+            
+            <div className="bg-slate-950/30 p-4 rounded-xl border border-slate-800">
+              <label className={labelStyle}>Target Funding Amount (RMK)</label>
+              <div className="flex items-center gap-3">
+                <input type="number" name="fundingMin" value={formData.fundingMin} onChange={handleChange} placeholder="Min" className={`${inputStyle} py-2 text-center`} />
+                <span className="text-slate-500 font-bold">-</span>
+                <input type="number" name="fundingMax" value={formData.fundingMax} onChange={handleChange} placeholder="Max" className={`${inputStyle} py-2 text-center`} />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-between pt-6 border-t border-slate-800/50">
+            <button onClick={() => setStep(1)} className="text-slate-400 hover:text-white font-bold px-4 py-3 tracking-wider uppercase transition-colors">
+              &larr; Back
+            </button>
+            <button onClick={processAndSync} className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-8 py-3 rounded-xl tracking-wider uppercase transition-all shadow-[0_0_15px_rgba(245,158,11,0.4)]">
+              Calculate Matches &rarr;
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* STEP 3 */}
+      {step === 3 && (
+        <div className="text-center py-12 animate-in zoom-in duration-500">
+          <div className="w-20 h-20 bg-emerald-500/20 border border-emerald-500/50 rounded-full flex items-center justify-center mx-auto mb-6">
+            <svg className="w-10 h-10 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <h2 className="text-3xl font-black text-white tracking-tight mb-2">Matrix Synchronized</h2>
+          <p className="text-slate-400 text-sm">Initializing your personalized dashboard...</p>
+        </div>
+      )}
     </div>
   );
 }
