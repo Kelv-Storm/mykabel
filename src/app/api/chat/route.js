@@ -14,7 +14,6 @@ export async function POST(request) {
     const messages = history || [];
     const smeProfile = profile || null;
 
-    // Map out context anchors if the profile exists
     let contextTelemetry = "The user hasn't provided details yet.";
     if (smeProfile) {
       contextTelemetry = `
@@ -26,22 +25,30 @@ export async function POST(request) {
       `;
     }
 
-    // 🚨 BULLETPROOF SANITIZATION: Filter out raw system/metadata roles passed from the frontend
+    // 1. Filter down to valid messaging components
     const validMessages = messages.filter(msg => msg.role === 'user' || msg.role === 'assistant' || msg.role === 'model');
 
-    // 🚨 THE GEMINI API RULE FIX: The chat history MUST start with a 'user' turn.
-    // If the local welcome message sits at index 0, shift it out so the API doesn't throw a validation fault.
+    // History sequence must start with a user turn
     if (validMessages.length > 0 && (validMessages[0].role === 'assistant' || validMessages[0].role === 'model')) {
       validMessages.shift();
     }
 
-    // Map the sanitized history cleanly into structural API expectations
-    const contents = validMessages.map(msg => ({
-      role: msg.role === 'user' ? 'user' : 'model',
-      parts: [{ text: msg.content || '' }] 
-    }));
+    // 2. ROLE COMPRESSOR: Safely combines consecutive duplicate roles so Gemini never throws a structure violation
+    const contents = [];
+    validMessages.forEach(msg => {
+      const currentRole = msg.role === 'user' ? 'user' : 'model';
+      const textContent = msg.content || '';
+      
+      if (contents.length > 0 && contents[contents.length - 1].role === currentRole) {
+        contents[contents.length - 1].parts[0].text += `\n${textContent}`;
+      } else {
+        contents.push({
+          role: currentRole,
+          parts: [{ text: textContent }]
+        });
+      }
+    });
 
-    // Package your core system instruction configurations securely
     const systemInstructionText = `System Persona: You are 'MyKabel Advisor', a highly friendly, empathetic, and human-like business mentor helping SMEs in Malaysia.
 You are currently chatting with the founder of this business:
 ${contextTelemetry}
@@ -67,10 +74,21 @@ CRITICAL INSTRUCTIONS FOR YOUR BEHAVIOR:
       }
     );
 
+    // 3. TRUE ERROR FORWARDING: Grab Google's exact raw rejection reason and push it to the frontend bubble
     if (!response.ok) {
       const errBody = await response.text();
       console.error("Gemini Gateway Error Payload:", errBody);
-      return NextResponse.json({ error: "Gemini AI engine thread rejection." }, { status: response.status });
+      
+      let trueGoogleError = errBody;
+      try {
+        const jsonErr = JSON.parse(errBody);
+        trueGoogleError = jsonErr.error?.message || jsonErr.message || errBody;
+      } catch (e) {}
+
+      return NextResponse.json({ 
+        error: "Gemini AI engine thread rejection.", 
+        details: trueGoogleError 
+      }, { status: response.status });
     }
 
     const resData = await response.json();
