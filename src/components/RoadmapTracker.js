@@ -16,25 +16,28 @@ export default function RoadmapTracker() {
       id: 2, 
       category: 'FINANCIAL', 
       title: 'Open Corporate Bank Account', 
-      completed: true 
+      completed: true,
+      link: 'https://www.maybank2u.com.my/home/m2u/common/login.do' // <-- Added Link
     },
     { 
       id: 3, 
       category: 'LEGAL', 
       title: 'Draft Initial Cap Table', 
-      completed: true 
+      completed: true,
+      link: 'https://wefunder.com/cap-table' // <-- Added Link
     },
     { 
       id: 4, 
       category: 'FINANCIAL', 
       title: 'Prepare 12-Month Financial Projections', 
-      completed: true 
+      completed: true,
+      link: 'https://www.liveplan.com/' // <-- Added Link
     },
     { 
       id: 5, 
       category: 'TAX', 
       title: 'Register Corporate Tax Profile (MyTax)', 
-      completed: false, 
+      completed: true, 
       link: 'https://mytax.hasil.gov.my/' 
     }
   ]);
