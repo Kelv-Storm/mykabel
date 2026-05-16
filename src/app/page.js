@@ -93,13 +93,14 @@ export default function Dashboard() {
       };
 
       let cleanText = JSON.stringify(newRecs);
+      // ADDED { merge: true } TO STOP IT FROM DELETING CHAT HISTORY
       await setDoc(doc(db, "smes", user.uid), {
         ...submittedData,
         metrics: newMetrics,
         recommendations: newRecs,
         userId: user.uid,
         createdAt: new Date()
-      });
+      }, { merge: true });
 
       setSmeProfile({
         ...submittedData,
