@@ -32,6 +32,7 @@ export default function StartupIntakeForm({ onComplete }) {
       if (!auth.currentUser) throw new Error("Authentication missing. Please reload.");
 
       // Formatted payload for the AI matching engine
+     // Formatted payload for the AI matching engine
       const telemetryPacket = {
         startupName: formData.startupName,
         description: formData.description,
@@ -40,7 +41,9 @@ export default function StartupIntakeForm({ onComplete }) {
         teamSize: formData.teamSize,
         fundingNeededMin: formData.fundingMin, 
         fundingNeededMax: formData.fundingMax,
-        lookingFor: ["Matches Generated"], // Failsafe array so your Profile UI doesn't crash
+        lookingFor: ["Matches Generated"],
+        recommendations: [], // <--- ADDS THIS: Wipes old matches immediately
+        metrics: { matches: 0 }, // <--- ADDS THIS: Resets counter to 0 instantly
         setupComplete: true,
         createdAt: new Date().toISOString()
       };
