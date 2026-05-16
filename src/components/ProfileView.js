@@ -5,26 +5,27 @@ import { doc, getDoc } from 'firebase/firestore';
 import { db, auth } from '../app/lib/firebaseConfig';
 
 // STATIC NEWS DICTIONARY - Zero API calls made
+// STATIC NEWS DICTIONARY - Zero API calls made, authentic redirects
 const STATIC_NEWS = {
   'FinTech': [
-    { source: "The Edge Malaysia", title: "Funding Tide Turns for Local FinTech Players as Capital Outflows Stabilize in KL", url: "#" },
-    { source: "The Star", title: "Bank Negara Unveils New Sandbox Parameters for Early-Stage Digital Finance", url: "#" }
+    { source: "The Edge Malaysia", title: "Funding Tide Turns for Local FinTech Players as Capital Outflows Stabilize in KL", url: "https://theedgemalaysia.com/category/startups" },
+    { source: "The Star", title: "Bank Negara Unveils New Sandbox Parameters for Early-Stage Digital Finance", url: "https://www.thestar.com.my/business/smebiz" }
   ],
   'HealthTech': [
-    { source: "Digital News Asia", title: "Malaysian HealthTech Startups See 300% Spike in Seed Inquiries Post-Pandemic", url: "#" },
-    { source: "Tech in Asia", title: "MRANTI Launches Specialized Bio-Innovation Grant for MedTech Wearables", url: "#" }
+    { source: "Digital News Asia", title: "Malaysian HealthTech Startups See 300% Spike in Seed Inquiries Post-Pandemic", url: "https://www.digitalnewsasia.com/startups" },
+    { source: "Tech in Asia", title: "MRANTI Launches Specialized Bio-Innovation Grant for MedTech Wearables", url: "https://www.techinasia.com/tag/malaysia" }
   ],
   'E-Commerce': [
-    { source: "Vulcan Post", title: "D2C Brands Dominate PitchIN Equity Crowdfunding Q2 Statistics", url: "#" },
-    { source: "The Edge Malaysia", title: "Logistics & E-Commerce Enablers Eyed by Regional VCs Seeking Series A", url: "#" }
+    { source: "Vulcan Post", title: "D2C Brands Dominate PitchIN Equity Crowdfunding Q2 Statistics", url: "https://vulcanpost.com/category/malaysia/" },
+    { source: "The Edge Malaysia", title: "Logistics & E-Commerce Enablers Eyed by Regional VCs Seeking Series A", url: "https://theedgemalaysia.com/category/startups" }
   ],
   'AgriTech': [
-    { source: "The Star", title: "Food Security Push: MDEC Fast-Tracks Grants for Smart Farming IoT Solutions", url: "#" },
-    { source: "TechNode Global", title: "AgriTech Founders in Southeast Asia Pivot to Sustainable Supply Chain Mapping", url: "#" }
+    { source: "The Star", title: "Food Security Push: MDEC Fast-Tracks Grants for Smart Farming IoT Solutions", url: "https://www.thestar.com.my/business/smebiz" },
+    { source: "TechNode Global", title: "AgriTech Founders in Southeast Asia Pivot to Sustainable Supply Chain Mapping", url: "https://technode.global/" }
   ],
   'SaaS': [
-    { source: "Digital News Asia", title: "B2B SaaS Valuations Hold Steady in Malaysia Despite Global Market Correction", url: "#" },
-    { source: "Vulcan Post", title: "1337 Ventures Highlights Enterprise Software as Top Accelerator Cohort Pick", url: "#" }
+    { source: "Digital News Asia", title: "B2B SaaS Valuations Hold Steady in Malaysia Despite Global Market Correction", url: "https://www.digitalnewsasia.com/startups" },
+    { source: "Vulcan Post", title: "1337 Ventures Highlights Enterprise Software as Top Accelerator Cohort Pick", url: "https://vulcanpost.com/category/malaysia/" }
   ]
 };
 
