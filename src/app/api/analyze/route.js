@@ -1,11 +1,14 @@
 import { NextResponse } from 'next/server';
 
+// 🚨 OVERRIDE VERCEL'S 10-SECOND TIMEOUT
+export const maxDuration = 60; 
+
 export async function POST(request) {
   try {
     const body = await request.json();
     const { startupName, sector, stage, teamSize, fundingNeededMin, fundingNeededMax, lookingFor } = body;
 
-   const prompt = `
+    const prompt = `
       You are the core intelligence matching routing module for "MyKabel", an enterprise SME matching engine in Malaysia.
       Analyze the following startup profile telemetry:
       - Startup Name: ${startupName}
@@ -52,11 +55,13 @@ export async function POST(request) {
         ]
       }
     `;
+
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       return NextResponse.json({ error: "Missing backend system deployment key." }, { status: 500 });
     }
 
+    // Keeping your correct 2.5-flash endpoint
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
       {
@@ -71,17 +76,29 @@ export async function POST(request) {
 
     if (!response.ok) {
       const errText = await response.text();
+      console.error("Google API Gateway Error:", errText);
       return NextResponse.json({ error: "Gemini API gateway thread reject.", details: errText }, { status: response.status });
     }
 
     const resData = await response.json();
-    const rawAiText = resData.candidates[0].content.parts[0].text;
+    let rawAiText = resData.candidates[0].content.parts[0].text;
     
+    // SAFETY NET: Strip out markdown formatting if the AI sneaks it in
+    if (rawAiText.includes('```json')) {
+      rawAiText = rawAiText.split('```json')[1].split('```')[0];
+    } else if (rawAiText.includes('```')) {
+      rawAiText = rawAiText.split('```')[1].split('```')[0];
+    }
+
+    if (!rawAiText || rawAiText.trim() === "") {
+        throw new Error("AI returned an empty response. Possible safety filter trigger.");
+    }
+
     const structuredOutput = JSON.parse(rawAiText.trim());
     return NextResponse.json(structuredOutput);
 
   } catch (error) {
     console.error("Analytical pipeline failure:", error);
-    return NextResponse.json({ error: "Internal telemetry pipeline generation error." }, { status: 500 });
+    return NextResponse.json({ error: "Internal telemetry pipeline generation error.", details: error.message }, { status: 500 });
   }
 }
