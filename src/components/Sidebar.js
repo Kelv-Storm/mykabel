@@ -7,7 +7,7 @@ const tabs = [
     { id: 'profile', label: 'My Profile' },
     { id: 'ai-matching', label: 'AI Matching' },
     { id: 'roadmap', label: 'Prerequisite Roadmap' },
-    { id: 'analytics', label: 'Analytics' },
+  
     { id: 'chatbot', label: 'AI Chatbot' }
   ];
     
