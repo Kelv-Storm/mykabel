@@ -1,13 +1,19 @@
 import { NextResponse } from 'next/server';
 
+export const maxDuration = 60;
+
 export async function POST(request) {
   try {
-    const { messages, smeProfile } = await request.json();
+    // 1. FIXED: Extract keys that match your frontend JSON packet exactly
+    const { history, profile } = await request.json();
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
       return NextResponse.json({ error: "Missing backend Gemini key." }, { status: 500 });
     }
+
+    const messages = history || [];
+    const smeProfile = profile || null;
 
     // Map out context anchors if the profile exists
     let contextTelemetry = "The user hasn't provided details yet.";
@@ -21,19 +27,20 @@ export async function POST(request) {
       `;
     }
 
+    // 2. FIXED: Map msg.content instead of msg.text to align with frontend structure
     const contents = messages.map(msg => ({
       role: msg.role === 'user' ? 'user' : 'model',
-      parts: [{ text: msg.text }]
+      parts: [{ text: msg.content }] 
     }));
 
-    // 👇 THE NEW "FRIENDLY HUMAN" PROMPT OVERRIDE 👇
+    // The "Friendly Human" Prompt Override Pre-seeding
     contents.unshift({
       role: 'user',
       parts: [{ 
         text: `System Persona: You are 'MyKabel Advisor', a highly friendly, empathetic, and human-like business mentor helping SMEs in Malaysia.
         You are currently chatting with the founder of this business:
         ${contextTelemetry}
-        
+         
         CRITICAL INSTRUCTIONS FOR YOUR BEHAVIOR:
         1. Be warm and conversational. Speak like a supportive friend who happens to be an expert in Malaysian startups, grants (Cradle, MDEC), and venture capital.
         2. DO NOT OVERWHELM THE USER. Give short, straightforward, and highly meaningful advice. Maximum 2 or 3 short paragraphs per response.
@@ -48,9 +55,9 @@ export async function POST(request) {
       parts: [{ text: "Got it! I will be friendly, concise, human-like, and I will strictly avoid using any Markdown symbols like asterisks. I'm ready to help them out!" }]
     });
 
-    // Generate the Stream
+    // 3. FIXED: Changed from streamGenerateContent to generateContent to provide a static JSON response
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -59,52 +66,19 @@ export async function POST(request) {
     );
 
     if (!response.ok) {
-      return NextResponse.json({ error: "Stream engine reject thread." }, { status: response.status });
+      const errBody = await response.text();
+      console.error("Gemini Gateway Error Payload:", errBody);
+      return NextResponse.json({ error: "Gemini AI engine thread rejection." }, { status: response.status });
     }
 
-    // Safely pipe the text stream back to the UI in real-time
-    const encoder = new TextEncoder();
-    const decoder = new TextDecoder();
+    const resData = await response.json();
+    const replyText = resData.candidates[0].content.parts[0].text;
 
-    const stream = new ReadableStream({
-      async start(controller) {
-        const reader = response.body.getReader();
-        let buffer = '';
-
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop() || '';
-
-            for (const line of lines) {
-              if (line.trim().startsWith('"text":')) {
-                const match = line.match(/"text":\s*"(.*)"/);
-                if (match && match[1]) {
-                  // Clean escaped newlines so the UI renders them properly
-                  let cleanChunk = match[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
-                  controller.enqueue(encoder.encode(cleanChunk));
-                }
-              }
-            }
-          }
-        } catch (err) {
-          controller.error(err);
-        } finally {
-          controller.close();
-        }
-      }
-    });
-
-    return new Response(stream, {
-      headers: { 'Content-Type': 'text/plain; charset=utf-8' }
-    });
+    // 4. FIXED: Return the structure expected by data.reply in ChatbotView.js
+    return NextResponse.json({ reply: replyText });
 
   } catch (error) {
     console.error("Chat routing failure:", error);
-    return NextResponse.json({ error: "Internal chat engine error." }, { status: 500 });
+    return NextResponse.json({ error: "Internal chat engine error.", details: error.message }, { status: 500 });
   }
 }
