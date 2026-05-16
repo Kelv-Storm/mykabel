@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-// 🚨 OVERRIDE VERCEL'S 10-SECOND TIMEOUT
+// Override Vercel's 10-second timeout limit
 export const maxDuration = 60; 
 
 export async function POST(request) {
@@ -61,9 +61,9 @@ export async function POST(request) {
       return NextResponse.json({ error: "Missing backend system deployment key." }, { status: 500 });
     }
 
-    // Keeping your correct 2.5-flash endpoint
+    // Swapping back to stable 2.5-flash since you have a fresh API key quota pool
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -76,22 +76,16 @@ export async function POST(request) {
 
     if (!response.ok) {
       const errText = await response.text();
-      console.error("Google API Gateway Error:", errText);
       return NextResponse.json({ error: "Gemini API gateway thread reject.", details: errText }, { status: response.status });
     }
 
     const resData = await response.json();
     let rawAiText = resData.candidates[0].content.parts[0].text;
     
-    // SAFETY NET: Strip out markdown formatting if the AI sneaks it in
     if (rawAiText.includes('```json')) {
       rawAiText = rawAiText.split('```json')[1].split('```')[0];
     } else if (rawAiText.includes('```')) {
       rawAiText = rawAiText.split('```')[1].split('```')[0];
-    }
-
-    if (!rawAiText || rawAiText.trim() === "") {
-        throw new Error("AI returned an empty response. Possible safety filter trigger.");
     }
 
     const structuredOutput = JSON.parse(rawAiText.trim());
